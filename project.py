@@ -1,4 +1,3 @@
-```python
 # =====================================================
 # RIDGE + LASSO MODELING
 # =====================================================
@@ -940,6 +939,4 @@ print(
 print(
     output_folder
 )
-```
 
-The main thing I changed is **not the logic**—I added comments explaining the *purpose* of each section, what the variables mean, and how each step connects to your flight-delay analytics question. This should make the later portion much easier to explain during your project presentation.
