@@ -1,448 +1,23 @@
-# =====================================================
-# IMPORT LIBRARIES
-# =====================================================
-
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-
-from pathlib import Path
-
-# Machine learning
-from sklearn.model_selection import train_test_split
-from sklearn.compose import ColumnTransformer
-from sklearn.preprocessing import OneHotEncoder, StandardScaler
-from sklearn.pipeline import Pipeline
-from sklearn.linear_model import Ridge, Lasso
-from sklearn.metrics import mean_absolute_error
-
-
-# =====================================================
-# LOAD DATA
-# =====================================================
-
-# Load cleaned airline delay dataset
-data = pd.read_csv(
-    "Airline_Delay_Cause_2021_2025_Cleaned.csv"
-)
-
-# Create separate dataset containing only 2025
-data_2025 = data[
-    data["year"] == 2025
-].copy()
-
-# Create folder for graphs
-output_folder = Path("project_graphs")
-output_folder.mkdir(exist_ok=True)
-
-# Confirm data loaded
-print("Data loaded:", len(data), "rows")
-
-
-# =====================================================
-# GRAPH 1:
-# MONTHLY ARRIVAL DELAY RATES (2021-2025)
-# =====================================================
-
-monthly = data.groupby(
-    ["year", "month"]
-)[
-    ["arr_del15", "arr_flights"]
-].sum()
-
-# Calculate delay rate
-monthly["delay_rate"] = (
-    monthly["arr_del15"]
-    / monthly["arr_flights"]
-    * 100
-)
-
-# Create chart
-fig, ax = plt.subplots(
-    figsize=(11, 6)
-)
-
-# Plot each year
-for year in sorted(data["year"].unique()):
-
-    yearly = monthly.loc[year]
-
-    ax.plot(
-        yearly.index,
-        yearly["delay_rate"],
-        marker="o",
-        label=str(year)
-    )
-
-# Format chart
-ax.set_title(
-    "Monthly Arrival Delay Rates, 2021–2025"
-)
-
-ax.set_xlabel("Month")
-
-ax.set_ylabel(
-    "Arrivals delayed 15+ minutes (%)"
-)
-
-ax.set_xticks(range(1, 13))
-
-ax.set_xticklabels([
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
-])
-
-ax.set_ylim(bottom=0)
-
-ax.grid(
-    axis="y",
-    alpha=0.3
-)
-
-ax.legend(
-    title="Year"
-)
-
-# Save and display
-fig.tight_layout()
-
-fig.savefig(
-    output_folder / "monthly_delay_rates.png",
-    dpi=300
-)
-
-plt.show()
-
-
-# =====================================================
-# GRAPH 2:
-# AIRLINE DELAY RATES BY CARRIER (2025)
-# =====================================================
-
-airlines = data_2025.groupby(
-    ["carrier", "carrier_name"],
-    as_index=False
-)[
-    ["arr_del15", "arr_flights"]
-].sum()
-
-# Only carriers with at least 200,000 flights
-airlines = airlines[
-    airlines["arr_flights"] >= 200000
-].copy()
-
-# Calculate delay percentage
-airlines["delay_rate"] = (
-    airlines["arr_del15"]
-    / airlines["arr_flights"]
-    * 100
-)
-
-# Sort
-airlines = airlines.sort_values(
-    "delay_rate"
-)
-
-# Create chart
-fig, ax = plt.subplots(
-    figsize=(12, 7)
-)
-
-labels = (
-    airlines["carrier"]
-    + " — "
-    + airlines["carrier_name"]
-)
-
-ax.barh(
-    labels,
-    airlines["delay_rate"]
-)
-
-# Add percentages
-for position, rate in enumerate(
-    airlines["delay_rate"]
-):
-
-    ax.text(
-        rate + 0.2,
-        position,
-        f"{rate:.1f}%",
-        va="center"
-    )
-
-# Format
-ax.set_title(
-    "Arrival Delay Rates by Reporting Carrier, 2025"
-)
-
-ax.set_xlabel(
-    "Arrivals delayed 15+ minutes (%)"
-)
-
-ax.set_xlim(
-    0,
-    airlines["delay_rate"].max() + 4
-)
-
-ax.grid(
-    axis="x",
-    alpha=0.2
-)
-
-ax.set_axisbelow(True)
-
-# Save and display
-fig.tight_layout()
-
-fig.savefig(
-    output_folder / "airline_delay_rates.png",
-    dpi=300
-)
-
-plt.show()
-
-
-# =====================================================
-# GRAPH 3:
-# DELAY CAUSES IN 2025
-# =====================================================
-
-cause_columns = {
-
-    "carrier_delay":
-        "Air carrier",
-
-    "weather_delay":
-        "Extreme weather",
-
-    "nas_delay":
-        "National Air System",
-
-    "security_delay":
-        "Security",
-
-    "late_aircraft_delay":
-        "Late aircraft"
-}
-
-# Sum delay minutes
-cause_minutes = data_2025[
-    list(cause_columns)
-].sum()
-
-# Calculate percentages
-cause_share = (
-    cause_minutes
-    / cause_minutes.sum()
-    * 100
-)
-
-# Rename
-cause_share.index = [
-    cause_columns[column]
-    for column in cause_share.index
-]
-
-# Sort
-cause_share = cause_share.sort_values()
-
-# Create chart
-fig, ax = plt.subplots(
-    figsize=(10, 6)
-)
-
-ax.barh(
-    cause_share.index,
-    cause_share.values
-)
-
-# Add percentages
-for position, share in enumerate(
-    cause_share.values
-):
-
-    ax.text(
-        share + 0.3,
-        position,
-        f"{share:.1f}%",
-        va="center"
-    )
-
-# Format
-ax.set_title(
-    "Share of Recorded Delay Minutes by Cause, 2025"
-)
-
-ax.set_xlabel(
-    "Share of total listed cause minutes (%)"
-)
-
-ax.set_xlim(
-    0,
-    cause_share.max() + 6
-)
-
-# Save and display
-fig.tight_layout()
-
-fig.savefig(
-    output_folder / "delay_causes.png",
-    dpi=300
-)
-
-plt.show()
-
-
-# =====================================================
-# LOAD EXISTING REGRESSION MODEL RESULTS
-# =====================================================
-
-results = pd.read_csv(
-    "Flight_Delay_2025_Model_Results.csv"
-)
-
-# Convert predicted rates into estimated
-# delayed flights
-results["predicted_delays"] = (
-    results["predicted_rate"]
-    * results["arr_flights"]
-)
-
-# Aggregate by month
-monthly_results = results.groupby(
-    "month"
-)[
-    [
-        "arr_del15",
-        "arr_flights",
-        "predicted_delays"
-    ]
-].sum()
-
-# Actual delay rate
-monthly_results["actual_rate"] = (
-    monthly_results["arr_del15"]
-    / monthly_results["arr_flights"]
-    * 100
-)
-
-# Predicted delay rate
-monthly_results["predicted_rate"] = (
-    monthly_results["predicted_delays"]
-    / monthly_results["arr_flights"]
-    * 100
-)
-
-
-# =====================================================
-# GRAPH 4:
-# ACTUAL VS EXISTING REGRESSION
-# =====================================================
-
-fig, ax = plt.subplots(
-    figsize=(11, 6)
-)
-
-# Actual
-ax.plot(
-    monthly_results.index,
-    monthly_results["actual_rate"],
-    marker="o",
-    label="Actual"
-)
-
-# Existing regression
-ax.plot(
-    monthly_results.index,
-    monthly_results["predicted_rate"],
-    marker="s",
-    linestyle="--",
-    label="Existing Regression"
-)
-
-# Format
-ax.set_title(
-    "Actual vs. Predicted Arrival Delay Rates, 2025"
-)
-
-ax.set_xlabel("Month")
-
-ax.set_ylabel(
-    "Arrival delay rate (%)"
-)
-
-ax.set_xticks(range(1, 13))
-
-ax.set_xticklabels([
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
-])
-
-ax.set_ylim(bottom=0)
-
-ax.grid(
-    axis="y",
-    alpha=0.3
-)
-
-ax.legend()
-
-# Save
-fig.tight_layout()
-
-fig.savefig(
-    output_folder / "actual_vs_predicted.png",
-    dpi=300
-)
-
-plt.show()
-
-
-# =====================================================
-# ORIGINAL MODEL EVALUATION
-# =====================================================
-
-actual = results["delay_rate"]
-
-weights = results["arr_flights"]
-
-# Baseline error
-baseline_error = np.average(
-    abs(
-        actual
-        - results["baseline"]
-    ),
-    weights=weights
-) * 100
-
-# Existing regression error
-model_error = np.average(
-    abs(
-        actual
-        - results["predicted_rate"]
-    ),
-    weights=weights
-) * 100
-
-print()
-print("==============================")
-print("ORIGINAL MODEL RESULTS")
-print("==============================")
-
-print(
-    f"Baseline error: "
-    f"{baseline_error:.2f} percentage points"
-)
-
-print(
-    f"Regression error: "
-    f"{model_error:.2f} percentage points"
-)
-
-
+```python
 # =====================================================
 # RIDGE + LASSO MODELING
+# =====================================================
+#
+# Goal:
+# Build two additional regression models that predict
+# the percentage of flights arriving 15+ minutes late.
+#
+# Ridge and Lasso are regularized versions of linear
+# regression. Regularization helps control the model when
+# there are many predictors, especially after categorical
+# variables such as airlines and airports are converted
+# into many numerical columns.
+#
+# Business/analytics purpose:
+# We want to determine whether these models can improve
+# prediction of flight delays and provide a more reliable
+# estimate that could help airlines identify operational
+# conditions associated with higher delay rates.
 # =====================================================
 
 print()
@@ -452,10 +27,26 @@ print("==============================")
 
 
 # -----------------------------------------------------
-# FEATURES
+# SELECT MODEL FEATURES
 # -----------------------------------------------------
 #
-# We are NOT using:
+# These are the variables that the models will use to
+# predict the flight delay rate.
+#
+# "month" tells the model when the flights occurred.
+#
+# "arr_flights" represents the number of arrival flights.
+#
+# "arr_cancelled" represents cancelled arrival flights.
+#
+# "arr_diverted" represents flights that were diverted.
+#
+# "carrier" identifies the airline.
+#
+# "airport" identifies the airport.
+#
+# We are intentionally NOT using the individual delay
+# cause variables below:
 #
 # carrier_ct
 # weather_ct
@@ -463,11 +54,15 @@ print("==============================")
 # security_ct
 # late_aircraft_ct
 #
-# because these are direct delay-cause measurements
-# and can cause target leakage.
+# These variables directly describe the causes of delays.
+# Using them to predict the delay rate could create
+# target leakage because the model would be given
+# information that is directly related to the outcome
+# we are trying to predict.
 #
-# Instead we use operational variables and
-# categorical information.
+# Instead, we use operational and categorical variables
+# that could reasonably be available before analyzing
+# the final delay outcome.
 # -----------------------------------------------------
 
 features = [
@@ -487,14 +82,33 @@ features = [
 
 
 # -----------------------------------------------------
-# CREATE MODELING DATASET
+# CREATE THE MODELING DATASET
+# -----------------------------------------------------
+#
+# We create a smaller dataset containing only the
+# variables needed for the Ridge and Lasso models.
+#
+# "delay_rate" is our target variable — the percentage
+# of flights that arrived 15+ minutes late.
 # -----------------------------------------------------
 
 model_data = data_2025[
     features + ["delay_rate"]
 ].copy()
 
-# Remove missing values
+
+# -----------------------------------------------------
+# HANDLE INVALID VALUES
+# -----------------------------------------------------
+#
+# Machine-learning models cannot work properly with
+# infinite values.
+#
+# We replace positive and negative infinity with NaN
+# (missing values), then remove rows containing missing
+# values.
+# -----------------------------------------------------
+
 model_data = model_data.replace(
     [np.inf, -np.inf],
     np.nan
@@ -504,7 +118,19 @@ model_data = model_data.dropna()
 
 
 # -----------------------------------------------------
-# X AND Y
+# SEPARATE FEATURES (X) FROM TARGET (Y)
+# -----------------------------------------------------
+#
+# X = the information the model uses to make predictions.
+#
+# y = the outcome we want the model to predict.
+#
+# In this project:
+#
+# X = month, flights, cancellations, diversions,
+#     carrier, and airport
+#
+# y = arrival delay rate
 # -----------------------------------------------------
 
 X = model_data[
@@ -519,6 +145,21 @@ y = model_data[
 # =====================================================
 # TRAIN / TEST SPLIT
 # =====================================================
+#
+# We split the data into two groups:
+#
+# Training data (80%):
+# Used by the models to learn relationships between
+# the features and the delay rate.
+#
+# Testing data (20%):
+# Used after training to evaluate how well the models
+# predict data they did not see during training.
+#
+# random_state=42 makes the split reproducible, meaning
+# we get the same training and testing groups each time
+# the code is run.
+# =====================================================
 
 X_train, X_test, y_train, y_test = train_test_split(
     X,
@@ -529,8 +170,26 @@ X_train, X_test, y_train, y_test = train_test_split(
 
 
 # =====================================================
-# DEFINE NUMERICAL AND CATEGORICAL VARIABLES
+# IDENTIFY NUMERICAL AND CATEGORICAL VARIABLES
 # =====================================================
+#
+# Numerical variables already contain numbers and can
+# be scaled for the model.
+#
+# Categorical variables contain labels such as an
+# airline code or airport code.
+#
+# Machine-learning models need these categories converted
+# into numerical representations before they can use them.
+# =====================================================
+
+
+# -----------------------------------------------------
+# NUMERICAL FEATURES
+# -----------------------------------------------------
+#
+# These variables contain numerical values.
+# -----------------------------------------------------
 
 numeric_features = [
 
@@ -543,6 +202,15 @@ numeric_features = [
     "arr_diverted"
 ]
 
+
+# -----------------------------------------------------
+# CATEGORICAL FEATURES
+# -----------------------------------------------------
+#
+# These variables represent categories rather than
+# continuous numerical measurements.
+# -----------------------------------------------------
+
 categorical_features = [
 
     "carrier",
@@ -553,6 +221,38 @@ categorical_features = [
 
 # =====================================================
 # PREPROCESSING
+# =====================================================
+#
+# Before the data enters Ridge or Lasso, we need to
+# prepare the variables.
+#
+# StandardScaler:
+# Puts numerical variables on a comparable scale.
+#
+# This is especially important for Ridge and Lasso
+# because their regularization depends on the size of
+# the model coefficients.
+#
+# OneHotEncoder:
+# Converts categories into numerical 0/1 columns.
+#
+# For example, if the dataset contains:
+#
+# carrier = AA, DL, UA
+#
+# One-hot encoding can create columns such as:
+#
+# carrier_AA
+# carrier_DL
+# carrier_UA
+#
+# handle_unknown="ignore" prevents the model from
+# crashing if the testing data contains a category
+# that was not present in the training data.
+#
+# ColumnTransformer allows us to apply different
+# preprocessing methods to numerical and categorical
+# variables.
 # =====================================================
 
 preprocessor = ColumnTransformer(
@@ -583,6 +283,31 @@ preprocessor = ColumnTransformer(
 # =====================================================
 # RIDGE REGRESSION
 # =====================================================
+#
+# Ridge Regression is a linear regression model that
+# includes L2 regularization.
+#
+# Regularization adds a penalty for very large model
+# coefficients.
+#
+# Why is this useful here?
+#
+# Once carrier and airport are one-hot encoded, the model
+# can have many predictor variables. Ridge helps prevent
+# the model from relying too heavily on any single
+# predictor.
+#
+# alpha controls the strength of the regularization.
+#
+# Larger alpha = stronger regularization.
+#
+# alpha=1.0 is the regularization strength we are using
+# for this model.
+#
+# The Pipeline connects the preprocessing steps directly
+# to the Ridge model so the same transformations are
+# automatically applied during training and prediction.
+# =====================================================
 
 ridge_model = Pipeline(
 
@@ -603,18 +328,51 @@ ridge_model = Pipeline(
 )
 
 
-# Train Ridge
+# -----------------------------------------------------
+# TRAIN THE RIDGE MODEL
+# -----------------------------------------------------
+#
+# The model learns relationships between the training
+# features and the actual delay rates.
+# -----------------------------------------------------
+
 ridge_model.fit(
     X_train,
     y_train
 )
 
-# Make predictions
+
+# -----------------------------------------------------
+# MAKE RIDGE PREDICTIONS
+# -----------------------------------------------------
+#
+# The trained model now uses the testing features to
+# predict delay rates for data it has not seen before.
+# -----------------------------------------------------
+
 ridge_predictions = ridge_model.predict(
     X_test
 )
 
-# Calculate MAE
+
+# -----------------------------------------------------
+# CALCULATE RIDGE MAE
+# -----------------------------------------------------
+#
+# MAE = Mean Absolute Error.
+#
+# It measures the average absolute difference between
+# the actual delay rate and the predicted delay rate.
+#
+# A smaller MAE means the predictions are closer to the
+# actual values.
+#
+# At this point, the error is still expressed in the
+# same scale as delay_rate, which is a decimal.
+# We multiply by 100 when displaying it as a percentage
+# point value later.
+# -----------------------------------------------------
+
 ridge_mae = mean_absolute_error(
     y_test,
     ridge_predictions
@@ -623,6 +381,28 @@ ridge_mae = mean_absolute_error(
 
 # =====================================================
 # LASSO REGRESSION
+# =====================================================
+#
+# Lasso Regression uses L1 regularization.
+#
+# Like Ridge, Lasso helps control overly large
+# coefficients.
+#
+# An important difference is that Lasso can shrink some
+# coefficients all the way to zero.
+#
+# This means Lasso can effectively remove less useful
+# predictors from the model.
+#
+# This can be useful for analytics because it may help
+# identify which variables contribute less to prediction.
+#
+# alpha=0.001 controls the strength of Lasso's
+# regularization.
+#
+# max_iter=50000 gives the optimization process more
+# iterations to find a solution, which can be useful
+# when the model contains many encoded variables.
 # =====================================================
 
 lasso_model = Pipeline(
@@ -645,18 +425,43 @@ lasso_model = Pipeline(
 )
 
 
-# Train Lasso
+# -----------------------------------------------------
+# TRAIN THE LASSO MODEL
+# -----------------------------------------------------
+#
+# Lasso learns the relationship between the training
+# features and the observed delay rates.
+# -----------------------------------------------------
+
 lasso_model.fit(
     X_train,
     y_train
 )
 
-# Predictions
+
+# -----------------------------------------------------
+# MAKE LASSO PREDICTIONS
+# -----------------------------------------------------
+#
+# Use the trained Lasso model to predict delay rates
+# for the testing data.
+# -----------------------------------------------------
+
 lasso_predictions = lasso_model.predict(
     X_test
 )
 
-# Calculate MAE
+
+# -----------------------------------------------------
+# CALCULATE LASSO MAE
+# -----------------------------------------------------
+#
+# This calculates the average absolute difference
+# between the actual delay rates and Lasso's predictions.
+#
+# Lower MAE indicates smaller prediction errors.
+# -----------------------------------------------------
+
 lasso_mae = mean_absolute_error(
     y_test,
     lasso_predictions
@@ -664,18 +469,50 @@ lasso_mae = mean_absolute_error(
 
 
 # =====================================================
-# WEIGHTED ERRORS
+# CALCULATE WEIGHTED ERRORS
 # =====================================================
 #
-# This uses the SAME general idea as your original
-# model evaluation:
+# The previous MAE gives every observation equal weight.
 #
-# Flights with more observations receive more weight.
+# However, airline records can represent very different
+# numbers of flights.
+#
+# For example:
+#
+# Record A = 500 flights
+# Record B = 50,000 flights
+#
+# Treating both records equally may not reflect the
+# overall airline traffic represented by the dataset.
+#
+# Therefore, we calculate a weighted error using
+# arr_flights.
+#
+# Records representing more flights have more influence
+# on the final weighted error.
+#
+# This is similar to the weighted evaluation used for
+# the original model.
 # =====================================================
 
 test_weights = X_test[
     "arr_flights"
 ].to_numpy()
+
+
+# -----------------------------------------------------
+# RIDGE WEIGHTED ERROR
+# -----------------------------------------------------
+#
+# Calculate the absolute difference between the actual
+# and predicted delay rate for every testing observation.
+#
+# np.average then calculates the weighted average using
+# the number of arrival flights as the weight.
+#
+# Multiplying by 100 converts the decimal error into
+# percentage points.
+# -----------------------------------------------------
 
 ridge_weighted_error = np.average(
     abs(
@@ -684,6 +521,14 @@ ridge_weighted_error = np.average(
     ),
     weights=test_weights
 ) * 100
+
+
+# -----------------------------------------------------
+# LASSO WEIGHTED ERROR
+# -----------------------------------------------------
+#
+# Perform the same weighted error calculation for Lasso.
+# -----------------------------------------------------
 
 lasso_weighted_error = np.average(
     abs(
@@ -697,17 +542,32 @@ lasso_weighted_error = np.average(
 # =====================================================
 # DISPLAY RIDGE AND LASSO RESULTS
 # =====================================================
+#
+# Print the model errors so we can compare how Ridge
+# and Lasso performed.
+#
+# MAE:
+# Average error across testing observations.
+#
+# Weighted error:
+# Average error while giving greater weight to records
+# representing more flights.
+# =====================================================
 
 print()
 print("==============================")
 print("RIDGE AND LASSO RESULTS")
 print("==============================")
 
+
+# Display Ridge's unweighted MAE
 print(
     f"Ridge MAE: "
     f"{ridge_mae * 100:.2f} percentage points"
 )
 
+
+# Display Lasso's unweighted MAE
 print(
     f"Lasso MAE: "
     f"{lasso_mae * 100:.2f} percentage points"
@@ -715,11 +575,15 @@ print(
 
 print()
 
+
+# Display Ridge's flight-weighted error
 print(
     f"Ridge weighted error: "
     f"{ridge_weighted_error:.2f} percentage points"
 )
 
+
+# Display Lasso's flight-weighted error
 print(
     f"Lasso weighted error: "
     f"{lasso_weighted_error:.2f} percentage points"
@@ -730,6 +594,29 @@ print(
 # GRAPH 5:
 # MODEL COMPARISON
 # =====================================================
+#
+# This graph compares the prediction errors from all
+# four approaches:
+#
+# 1. Baseline
+# 2. Existing Regression
+# 3. Ridge Regression
+# 4. Lasso Regression
+#
+# The goal is to visually compare model performance.
+#
+# The error metric is Weighted Mean Absolute Error.
+#
+# Lower values represent smaller prediction errors.
+# =====================================================
+
+
+# -----------------------------------------------------
+# MODEL NAMES
+# -----------------------------------------------------
+#
+# These labels will appear along the x-axis.
+# -----------------------------------------------------
 
 model_names = [
 
@@ -741,6 +628,16 @@ model_names = [
 
     "Lasso"
 ]
+
+
+# -----------------------------------------------------
+# MODEL ERRORS
+# -----------------------------------------------------
+#
+# Store the corresponding weighted error for each model.
+#
+# The order must match model_names above.
+# -----------------------------------------------------
 
 model_errors = [
 
@@ -754,29 +651,50 @@ model_errors = [
 ]
 
 
+# -----------------------------------------------------
+# CREATE MODEL COMPARISON GRAPH
+# -----------------------------------------------------
+
 fig, ax = plt.subplots(
     figsize=(10, 6)
 )
 
+
+# Create one bar for each model's weighted error
 ax.bar(
     model_names,
     model_errors
 )
 
+
+# Add graph title
 ax.set_title(
     "Comparison of Flight Delay Prediction Models"
 )
 
+
+# Label the y-axis
 ax.set_ylabel(
     "Weighted Mean Absolute Error (percentage points)"
 )
 
+
+# Add horizontal grid lines to make the values easier
+# to compare visually
 ax.grid(
     axis="y",
     alpha=0.3
 )
 
-# Add values above bars
+
+# -----------------------------------------------------
+# ADD ERROR VALUES ABOVE EACH BAR
+# -----------------------------------------------------
+#
+# This allows the reader to see the exact error value
+# without having to estimate it from the graph.
+# -----------------------------------------------------
+
 for position, error in enumerate(
     model_errors
 ):
@@ -788,27 +706,62 @@ for position, error in enumerate(
         ha="center"
     )
 
-# Save
+
+# Adjust spacing so labels fit properly
 fig.tight_layout()
 
+
+# Save the graph as a high-resolution PNG file
 fig.savefig(
     output_folder / "model_comparison.png",
     dpi=300
 )
 
+
+# Display the graph
 plt.show()
 
 
 # =====================================================
 # GRAPH 6:
-# RIDGE AND LASSO ACTUAL VS PREDICTED
+# RIDGE AND LASSO — ACTUAL VS. PREDICTED
+# =====================================================
+#
+# This graph shows how closely each model's predictions
+# match the actual delay rates.
+#
+# X-axis = actual delay rate
+# Y-axis = predicted delay rate
+#
+# The dashed diagonal line represents perfect prediction.
+#
+# If a prediction is close to the line, the model's
+# prediction is close to the actual value.
+#
+# If points are far from the line, the prediction has
+# a larger error.
+#
+# This graph provides a visual way to evaluate the
+# behavior of Ridge and Lasso beyond simply looking at
+# their MAE values.
 # =====================================================
 
 fig, ax = plt.subplots(
     figsize=(11, 6)
 )
 
-# Ridge
+
+# -----------------------------------------------------
+# RIDGE PREDICTIONS
+# -----------------------------------------------------
+#
+# Each point represents one observation from the
+# testing dataset.
+#
+# x = actual delay rate
+# y = Ridge predicted delay rate
+# -----------------------------------------------------
+
 ax.scatter(
     y_test,
     ridge_predictions,
@@ -816,7 +769,15 @@ ax.scatter(
     label="Ridge"
 )
 
-# Lasso
+
+# -----------------------------------------------------
+# LASSO PREDICTIONS
+# -----------------------------------------------------
+#
+# Plot Lasso's predictions on the same graph so the
+# two regularized models can be visually compared.
+# -----------------------------------------------------
+
 ax.scatter(
     y_test,
     lasso_predictions,
@@ -824,7 +785,28 @@ ax.scatter(
     label="Lasso"
 )
 
-# Perfect prediction line
+
+# -----------------------------------------------------
+# CREATE PERFECT-PREDICTION LINE
+# -----------------------------------------------------
+#
+# Perfect predictions would have:
+#
+# actual value = predicted value
+#
+# For example:
+#
+# Actual = 10%
+# Predicted = 10%
+#
+# Therefore, the perfect-prediction line follows:
+#
+# y = x
+#
+# The closer the points are to this line, the closer
+# the predictions are to the actual values.
+# -----------------------------------------------------
+
 minimum = min(
     y_test.min(),
     ridge_predictions.min(),
@@ -837,6 +819,8 @@ maximum = max(
     lasso_predictions.max()
 )
 
+
+# Draw the perfect-prediction reference line
 ax.plot(
     [minimum, maximum],
     [minimum, maximum],
@@ -844,38 +828,70 @@ ax.plot(
     label="Perfect Prediction"
 )
 
-# Format
+
+# -----------------------------------------------------
+# FORMAT THE GRAPH
+# -----------------------------------------------------
+
 ax.set_title(
     "Ridge and Lasso: Actual vs. Predicted Delay Rates"
 )
 
+
+# X-axis represents the actual observed delay rate
 ax.set_xlabel(
     "Actual delay rate (%)"
 )
 
+
+# Y-axis represents the model's predicted delay rate
 ax.set_ylabel(
     "Predicted delay rate (%)"
 )
 
+
+# Display the Ridge, Lasso, and perfect prediction labels
 ax.legend()
 
+
+# Add grid lines to make the graph easier to read
 ax.grid(
     alpha=0.3
 )
 
-# Save
+
+# Adjust spacing
 fig.tight_layout()
 
+
+# Save graph
 fig.savefig(
     output_folder / "ridge_lasso_predictions.png",
     dpi=300
 )
 
+
+# Display graph
 plt.show()
 
 
 # =====================================================
 # FINAL RESULTS
+# =====================================================
+#
+# Print all four models together so the final results
+# can easily be compared.
+#
+# The same weighted error metric is used for all four
+# models:
+#
+# Baseline
+# Existing Regression
+# Ridge
+# Lasso
+#
+# This gives us one consistent measure for comparing
+# prediction performance.
 # =====================================================
 
 print()
@@ -883,31 +899,47 @@ print("======================================")
 print("FINAL MODEL PERFORMANCE SUMMARY")
 print("======================================")
 
+
+# Baseline model error
 print(
     f"Baseline:            "
     f"{baseline_error:.2f} percentage points"
 )
 
+
+# Existing regression model error
 print(
     f"Existing Regression: "
     f"{model_error:.2f} percentage points"
 )
 
+
+# Ridge model error
 print(
     f"Ridge Regression:    "
     f"{ridge_weighted_error:.2f} percentage points"
 )
 
+
+# Lasso model error
 print(
     f"Lasso Regression:    "
     f"{lasso_weighted_error:.2f} percentage points"
 )
 
+
 print()
+
+
+# Tell the user where all generated graphs were saved
 print(
     "Graphs saved to:"
 )
 
+
 print(
     output_folder
 )
+```
+
+The main thing I changed is **not the logic**—I added comments explaining the *purpose* of each section, what the variables mean, and how each step connects to your flight-delay analytics question. This should make the later portion much easier to explain during your project presentation.
