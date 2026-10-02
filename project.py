@@ -138,3 +138,56 @@ ax.set_xlim(0, cause_share.max() + 6)
 fig.tight_layout()
 fig.savefig(output_folder / "delay_causes.png", dpi=300)
 plt.show()
+
+results = pd.read_csv("Flight_Delay_2025_Model_Results.csv")
+
+results["predicted_delays"] = (
+    results["predicted_rate"] * results["arr_flights"]
+)
+
+monthly_results = results.groupby("month")[
+    ["arr_del15", "arr_flights", "predicted_delays"]
+].sum()
+
+monthly_results["actual_rate"] = (
+    monthly_results["arr_del15"]
+    / monthly_results["arr_flights"] * 100
+)
+
+monthly_results["predicted_rate"] = (
+    monthly_results["predicted_delays"]
+    / monthly_results["arr_flights"] * 100
+)
+
+fig, ax = plt.subplots(figsize=(11, 6))
+
+ax.plot(
+    monthly_results.index,
+    monthly_results["actual_rate"],
+    marker="o",
+    label="Actual"
+)
+
+ax.plot(
+    monthly_results.index,
+    monthly_results["predicted_rate"],
+    marker="s",
+    linestyle="--",
+    label="Predicted"
+)
+
+ax.set_title("Actual vs. Predicted Arrival Delay Rates, 2025")
+ax.set_xlabel("Month")
+ax.set_ylabel("Arrival delay rate (%)")
+ax.set_xticks(range(1, 13))
+ax.set_xticklabels([
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+])
+ax.set_ylim(bottom=0)
+ax.grid(axis="y", alpha=0.3)
+ax.legend()
+
+fig.tight_layout()
+fig.savefig(output_folder / "actual_vs_predicted.png", dpi=300)
+plt.show()
