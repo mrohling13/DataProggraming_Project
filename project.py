@@ -45,3 +45,34 @@ ax.legend(title="Year")
 fig.tight_layout()
 fig.savefig(output_folder / "monthly_delay_rates.png", dpi=300)
 plt.show()
+
+airlines = data_2025.groupby(
+    ["carrier", "carrier_name"], as_index=False
+)[["arr_del15", "arr_flights"]].sum()
+
+# Include carriers with at least 200,000 flights in 2025
+airlines = airlines[airlines["arr_flights"] >= 200000].copy()
+
+airlines["delay_rate"] = (
+    airlines["arr_del15"] / airlines["arr_flights"] * 100
+)
+
+airlines = airlines.sort_values("delay_rate")
+
+fig, ax = plt.subplots(figsize=(12, 7))
+
+labels = airlines["carrier"] + " — " + airlines["carrier_name"]
+ax.barh(labels, airlines["delay_rate"], color="#2864A0")
+
+for position, rate in enumerate(airlines["delay_rate"]):
+    ax.text(rate + 0.2, position, f"{rate:.1f}%", va="center")
+
+ax.set_title("Arrival Delay Rates by Reporting Carrier, 2025")
+ax.set_xlabel("Arrivals delayed 15+ minutes (%)")
+ax.set_xlim(0, airlines["delay_rate"].max() + 4)
+ax.grid(axis="x", alpha=0.2)
+ax.set_axisbelow(True)
+
+fig.tight_layout()
+fig.savefig(output_folder / "airline_delay_rates.png", dpi=300)
+plt.show()
