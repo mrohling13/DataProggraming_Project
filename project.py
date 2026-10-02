@@ -107,3 +107,34 @@ ax.set_axisbelow(True)
 fig.tight_layout()
 fig.savefig(output_folder / "airline_delay_rates.png", dpi=300)
 plt.show()
+
+cause_columns = {
+    "carrier_delay": "Air carrier",
+    "weather_delay": "Extreme weather",
+    "nas_delay": "National Air System",
+    "security_delay": "Security",
+    "late_aircraft_delay": "Late aircraft"
+}
+
+cause_minutes = data_2025[list(cause_columns)].sum()
+
+cause_share = cause_minutes / cause_minutes.sum() * 100
+cause_share.index = [
+    cause_columns[column] for column in cause_share.index
+]
+cause_share = cause_share.sort_values()
+
+fig, ax = plt.subplots(figsize=(10, 6))
+
+ax.barh(cause_share.index, cause_share.values, color="#398575")
+
+for position, share in enumerate(cause_share.values):
+    ax.text(share + 0.3, position, f"{share:.1f}%", va="center")
+
+ax.set_title("Share of Recorded Delay Minutes by Cause, 2025")
+ax.set_xlabel("Share of total listed cause minutes (%)")
+ax.set_xlim(0, cause_share.max() + 6)
+
+fig.tight_layout()
+fig.savefig(output_folder / "delay_causes.png", dpi=300)
+plt.show()
