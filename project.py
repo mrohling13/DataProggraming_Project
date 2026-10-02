@@ -191,3 +191,21 @@ ax.legend()
 fig.tight_layout()
 fig.savefig(output_folder / "actual_vs_predicted.png", dpi=300)
 plt.show()
+
+import numpy as np
+
+actual = results["delay_rate"]
+weights = results["arr_flights"]
+
+baseline_error = np.average(
+    abs(actual - results["baseline"]),
+    weights=weights
+) * 100
+
+model_error = np.average(
+    abs(actual - results["predicted_rate"]),
+    weights=weights
+) * 100
+
+print(f"Baseline error: {baseline_error:.2f} percentage points")
+print(f"Regression error: {model_error:.2f} percentage points")
